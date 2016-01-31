@@ -1,17 +1,19 @@
 # -*- encoding: utf8 -*-
 # version 1.11
 
+import math
 import tkinter.messagebox
 from tkinter import *
 from tkinter.ttk import *
 import datetime
 import threading
 import pickle
-import time
+import winsound
 import tushare as ts
 import pywinauto
 import pywinauto.clipboard
 import pywinauto.application
+from snowball_monitor import *
 
 NUM_OF_STOCKS = 5  # 自定义股票数量
 is_start = False
@@ -268,41 +270,6 @@ class OperationThs:
         self.__closePopupWindows()
 
 
-# def getStockData(items_info):
-#     """
-#     获取股票实时数据
-#     :param items_info: 股票信息，没写的股票用空字符代替
-#     :return: 股票名称价格
-#     """
-#     global stock_codes
-#     code_name_price = []
-#     try:
-#         df = ts.get_realtime_quotes(stock_codes)
-#         df_len = len(df)
-#         for stock_code in stock_codes:
-#             is_found = False
-#             for i in range(df_len):
-#                 actual_code = df['code'][i]
-#                 if stock_code == actual_code:
-#                     actual_name = df['name'][i]
-#                     pre_close = float(df['pre_close'][i])
-#                     if 'ST' in actual_name:
-#                         highest = str(round(pre_close * 1.05, 2))
-#                         lowest = str(round(pre_close * 0.95, 2))
-#                         code_name_price.append((actual_code, actual_name, float(df['price'][i]), (highest, lowest)))
-#                     else:
-#                         highest = str(round(pre_close * 1.1, 2))
-#                         lowest = str(round(pre_close * 0.9, 2))
-#                         code_name_price.append((actual_code, actual_name, float(df['price'][i]), (highest, lowest)))
-#                     is_found = True
-#                     break
-#             if is_found is False:
-#                 code_name_price.append(('', '', '', ('', '')))
-#     except:
-#         code_name_price = [('', '', '', ('', ''))] * NUM_OF_STOCKS
-#     return code_name_price
-
-
 def getStockData():
     """
     获取股票实时数据
@@ -326,7 +293,6 @@ def getStockData():
     except:
         code_name_price = [('', '', 0)] * NUM_OF_STOCKS  # 网络不行，返回空
     return code_name_price
-
 
 def monitor():
     """
@@ -370,6 +336,78 @@ def monitor():
         time.sleep(3)
         count += 1
 
+def auto_trade():
+    try:
+        operation = OperationThs()
+        operation.maxWindow()
+        pre_position = operation.getPosition()
+        position = format_position(pre_position)
+        money = operation.getMoney()
+    except:
+        tkinter.messagebox.showerror('错误', '无法获得交易软件句柄')
+    monitor = snowball_monitor()
+    while 1:
+        na = monitor.get_new_adjustment()
+        if na is not None:
+            # sell
+            for stock_symbol in na['group_history']:
+                single_adjustment = na['group_history'][stock_symbol]
+                if single_adjustment['prev_weight'] > single_adjustment['target_weight'] and \
+                    stock_symbol in position and position[stock_symbol] > 0:
+                    quantity = calculate_sell_quantity(stock_symbol, single_adjustment, position[stock_symbol])
+                    order([stock_symbol, 'S', quantity], operation)
+                    winsound.Beep(800, 800)
+                    tkinter.messagebox.showinfo('Sell',stock_symbol)
+            # buy
+            for stock_symbol in na['group_history']:
+                single_adjustment = na['group_history'][stock_symbol]
+                if single_adjustment['prev_weight'] < single_adjustment['target_weight']:
+                    quantity = calculate_buy_quantity(stock_symbol, single_adjustment, money)
+                    order([stock_symbol, 'B', quantity], operation)
+                    winsound.Beep(800, 800)
+                    tkinter.messagebox.showinfo('Buy',stock_symbol)
+        time.sleep(1.5)
+
+def format_position(position):
+    formatted_position = {}
+    for r in position:
+        formatted_position[r[3]] = [r[6]]
+    return
+
+def order(new_adjustment, operation):
+    try:
+        operation.maxWindow()
+        operation.order(new_adjustment)
+        operation.refresh()
+    except:
+        return 0
+    return 1
+
+def calculate_buy_quantity(stock_symbol, single_adjustment, money):
+    p_w, t_w = single_adjustment['prev_weight'], single_adjustment['target_weight']
+    price = get_stock_price(stock_symbol)
+    if p_w / t_w <= 0.3:
+        return 0
+    elif p_w / t_w >= 0.8:
+        return math.floor(money/price/100)*100
+    else:
+        return (p_w/t_w*money/price)//100*100
+
+def calculate_sell_quantity(stock_symbol, single_adjustment, position):
+    p_w, t_w = single_adjustment['prev_weight'], single_adjustment['target_weight']
+    if p_w / t_w <= 0.3:
+        return position
+    elif p_w / t_w >= 0.8:
+        return 0
+    else:
+        return (p_w/t_w*position)//100*100
+
+def get_stock_price(stock_symbol):
+    try:
+        df = ts.get_realtime_quotes(stock_symbol)
+    except:
+        return None
+    return df['ask'][0]
 
 class StockGui:
     def __init__(self):
