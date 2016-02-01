@@ -269,74 +269,8 @@ class OperationThs:
         self.__dialog_window.Button7.Click()
         self.__closePopupWindows()
 
-
-def getStockData():
-    """
-    获取股票实时数据
-    :return:股票实时数据
-    """
-    global stock_codes
-    code_name_price = []
-    try:
-        df = ts.get_realtime_quotes(stock_codes)
-        df_len = len(df)
-        for stock_code in stock_codes:
-            is_found = False
-            for i in range(df_len):
-                actual_code = df['code'][i]
-                if stock_code == actual_code:
-                    code_name_price.append((actual_code, df['name'][i], float(df['price'][i])))
-                    is_found = True
-                    break
-            if is_found is False:
-                code_name_price.append(('', '', 0))
-    except:
-        code_name_price = [('', '', 0)] * NUM_OF_STOCKS  # 网络不行，返回空
-    return code_name_price
-
-def monitor():
-    """
-    实时监控函数
-    """
-    global actual_stocks_info, consignation_info, is_ordered, is_dealt, set_stocks_info
-    count = 1
-    pre_position = []
-    try:
-        operation = OperationThs()
-        operation.maxWindow()
-        pre_position = operation.getPosition()
-        # print(pre_position)
-    except:
-        tkinter.messagebox.showerror('错误', '无法获得交易软件句柄')
-    while is_monitor:
-        if is_start:
-            actual_stocks_info = getStockData()
-            for row, (actual_code, actual_name, actual_price) in enumerate(actual_stocks_info):
-                if actual_code and is_start and is_ordered[row] == 1 and actual_price > 0 \
-                        and set_stocks_info[row][1] and set_stocks_info[row][2] > 0 \
-                        and set_stocks_info[row][3] and set_stocks_info[row][4] \
-                        and datetime.datetime.now().time() > set_stocks_info[row][5]:
-                    if (set_stocks_info[row][1] == '>' and actual_price > set_stocks_info[row][2]) or \
-                            (set_stocks_info[row][1] == '<' and float(actual_price) < set_stocks_info[row][2]):
-                        operation.maxWindow()
-                        operation.order(actual_code, set_stocks_info[row][3], set_stocks_info[row][4])
-                        dt = datetime.datetime.now()
-                        is_ordered[row] = 0
-                        operation.refresh()
-                        cur_position = operation.getPosition()
-                        is_dealt[row] = operation.getDeal(actual_code, pre_position, cur_position)
-                        consignation_info.append(
-                            (dt.strftime('%x'), dt.strftime('%X'), actual_code,
-                             actual_name, set_stocks_info[row][3],
-                             actual_price, set_stocks_info[row][4], '已委托', is_dealt[row]))
-                        pre_position = cur_position
-
-        if count % 200 == 0:
-            operation.refresh()
-        time.sleep(3)
-        count += 1
-
 def auto_trade():
+    count = 0
     try:
         operation = OperationThs()
         operation.maxWindow()
@@ -357,7 +291,6 @@ def auto_trade():
                     quantity = calculate_sell_quantity(stock_symbol, single_adjustment, position[stock_symbol])
                     order([stock_symbol, 'S', quantity], operation)
                     winsound.Beep(800, 800)
-                    tkinter.messagebox.showinfo('Sell',stock_symbol)
             # buy
             for stock_symbol in na['group_history']:
                 single_adjustment = na['group_history'][stock_symbol]
@@ -365,14 +298,18 @@ def auto_trade():
                     quantity = calculate_buy_quantity(stock_symbol, single_adjustment, money)
                     order([stock_symbol, 'B', quantity], operation)
                     winsound.Beep(800, 800)
-                    tkinter.messagebox.showinfo('Buy',stock_symbol)
         time.sleep(1.5)
+        count += 1
+        print(count)
+        if count % 200 == 0:
+            operation.refresh()
+
 
 def format_position(position):
     formatted_position = {}
     for r in position:
         formatted_position[r[3]] = [r[6]]
-    return
+    return formatted_position
 
 def order(new_adjustment, operation):
     try:
@@ -380,12 +317,16 @@ def order(new_adjustment, operation):
         operation.order(new_adjustment)
         operation.refresh()
     except:
-        return 0
-    return 1
+        return False
+    return True
 
 def calculate_buy_quantity(stock_symbol, single_adjustment, money):
     p_w, t_w = single_adjustment['prev_weight'], single_adjustment['target_weight']
-    price = get_stock_price(stock_symbol)
+    while 1:
+        stock_price = get_stock_realtime_price(stock_symbol)
+        if stock_price is not None:
+            price = ['a5_p'][0]
+            break
     if p_w / t_w <= 0.3:
         return 0
     elif p_w / t_w >= 0.8:
@@ -395,282 +336,20 @@ def calculate_buy_quantity(stock_symbol, single_adjustment, money):
 
 def calculate_sell_quantity(stock_symbol, single_adjustment, position):
     p_w, t_w = single_adjustment['prev_weight'], single_adjustment['target_weight']
-    if p_w / t_w <= 0.3:
+    if (t_w == 0) or (p_w / t_w <= 0.3):
         return position
     elif p_w / t_w >= 0.8:
         return 0
     else:
         return (p_w/t_w*position)//100*100
 
-def get_stock_price(stock_symbol):
+def get_stock_realtime_price(stock_symbol):
     try:
         df = ts.get_realtime_quotes(stock_symbol)
     except:
         return None
-    return df['ask'][0]
-
-class StockGui:
-    def __init__(self):
-        self.window = Tk()
-        self.window.title("自动化股票交易")
-        self.window.resizable(0, 0)
-
-        frame1 = Frame(self.window)
-        frame1.pack(padx=10, pady=10)
-
-        Label(frame1, text="股票代码", width=8, justify=CENTER).grid(
-            row=1, column=1, padx=5, pady=5)
-        Label(frame1, text="股票名称", width=8, justify=CENTER).grid(
-            row=1, column=2, padx=5, pady=5)
-        Label(frame1, text="实时价格", width=8, justify=CENTER).grid(
-            row=1, column=3, padx=5, pady=5)
-        Label(frame1, text="关系", width=4, justify=CENTER).grid(
-            row=1, column=4, padx=5, pady=5)
-        Label(frame1, text="设定价格", width=8, justify=CENTER).grid(
-            row=1, column=5, padx=5, pady=5)
-        Label(frame1, text="方向", width=4, justify=CENTER).grid(
-            row=1, column=6, padx=5, pady=5)
-        Label(frame1, text="数量", width=8, justify=CENTER).grid(
-            row=1, column=7, padx=5, pady=5)
-        Label(frame1, text="时间可选", width=8, justify=CENTER).grid(
-            row=1, column=8, padx=5, pady=5)
-        Label(frame1, text="委托", width=6, justify=CENTER).grid(
-            row=1, column=9, padx=5, pady=5)
-        Label(frame1, text="成交", width=6, justify=CENTER).grid(
-            row=1, column=10, padx=5, pady=5)
-
-        self.rows = NUM_OF_STOCKS
-        self.cols = 10
-
-        self.variable = []
-        for row in range(self.rows):
-            self.variable.append([])
-            for col in range(self.cols):
-                self.variable[row].append(StringVar())
-
-        for row in range(self.rows):
-            Entry(frame1, textvariable=self.variable[row][0],
-                  width=8).grid(row=row + 2, column=1, padx=5, pady=5)
-            Entry(frame1, textvariable=self.variable[row][1], state=DISABLED,
-                  width=8).grid(row=row + 2, column=2, padx=5, pady=5)
-            Entry(frame1, textvariable=self.variable[row][2], state=DISABLED, justify=RIGHT,
-                  width=8).grid(row=row + 2, column=3, padx=5, pady=5)
-            Combobox(frame1, values=('<', '>'), textvariable=self.variable[row][3],
-                     width=2).grid(row=row + 2, column=4, padx=5, pady=5)
-            Spinbox(frame1, from_=0, to=999, textvariable=self.variable[row][4], justify=RIGHT,
-                    increment=0.01, width=6).grid(row=row + 2, column=5, padx=5, pady=5)
-            Combobox(frame1, values=('B', 'S'), textvariable=self.variable[row][5],
-                     width=2).grid(row=row + 2, column=6, padx=5, pady=5)
-            Spinbox(frame1, from_=0, to=10000, textvariable=self.variable[row][6], justify=RIGHT,
-                    increment=100, width=6).grid(row=row + 2, column=7, padx=5, pady=5)
-            Entry(frame1, textvariable=self.variable[row][7],
-                  width=8).grid(row=row + 2, column=8, padx=5, pady=5)
-            Entry(frame1, textvariable=self.variable[row][8], state=DISABLED, justify=CENTER,
-                  width=6).grid(row=row + 2, column=9, padx=5, pady=5)
-            Entry(frame1, textvariable=self.variable[row][9], state=DISABLED, justify=RIGHT,
-                  width=6).grid(row=row + 2, column=10, padx=5, pady=5)
-
-        frame3 = Frame(self.window)
-        frame3.pack(padx=10, pady=10)
-        self.start_bt = Button(frame3, text="开始", command=self.start)
-        self.start_bt.pack(side=LEFT)
-        self.set_bt = Button(frame3, text='重置买卖', command=self.setFlags)
-        self.set_bt.pack(side=LEFT)
-        Button(frame3, text="历史记录", command=self.displayHisRecords).pack(side=LEFT)
-        Button(frame3, text='保存', command=self.save).pack(side=LEFT)
-        self.load_bt = Button(frame3, text='载入', command=self.load)
-        self.load_bt.pack(side=LEFT)
-
-        self.window.protocol(name="WM_DELETE_WINDOW", func=self.close)
-        self.window.after(100, self.updateControls)
-
-        self.window.mainloop()
-
-    def displayHisRecords(self):
-        """
-        显示历史信息
-        """
-        global consignation_info
-        tp = Toplevel()
-        tp.title('历史记录')
-        tp.resizable(0, 1)
-        scrollbar = Scrollbar(tp)
-        scrollbar.pack(side=RIGHT, fill=Y)
-        col_name = ['日期', '时间', '证券代码', '证券名称', '方向', '价格', '数量', '委托', '成交']
-        tree = Treeview(
-            tp, show='headings', columns=col_name, height=30, yscrollcommand=scrollbar.set)
-        tree.pack(expand=1, fill=Y)
-        scrollbar.config(command=tree.yview)
-        for name in col_name:
-            tree.heading(name, text=name)
-            tree.column(name, width=70, anchor=CENTER)
-
-        for msg in consignation_info:
-            tree.insert('', 0, values=msg)
-
-    def save(self):
-        """
-        保存设置
-        """
-        global set_stocks_info, consignation_info
-        self.getItems()
-        with open('stockInfo.dat', 'wb') as fp:
-            pickle.dump(set_stocks_info, fp)
-            pickle.dump(consignation_info, fp)
-
-    def load(self):
-        """
-        载入设置
-        """
-        global set_stocks_info, consignation_info
-        try:
-            with open('stockInfo.dat', 'rb') as fp:
-                set_stocks_info = pickle.load(fp)
-                consignation_info = pickle.load(fp)
-        except FileNotFoundError as error:
-            tkinter.messagebox.showerror('错误', error)
-
-        for row in range(self.rows):
-            for col in range(self.cols):
-                if col == 0:
-                    self.variable[row][col].set(set_stocks_info[row][0])
-                elif col == 3:
-                    self.variable[row][col].set(set_stocks_info[row][1])
-                elif col == 4:
-                    self.variable[row][col].set(set_stocks_info[row][2])
-                elif col == 5:
-                    self.variable[row][col].set(set_stocks_info[row][3])
-                elif col == 6:
-                    self.variable[row][col].set(set_stocks_info[row][4])
-                elif col == 7:
-                    temp = set_stocks_info[row][5].strftime('%X')
-                    if temp == '01:00:00':
-                        self.variable[row][col].set('')
-                    else:
-                        self.variable[row][col].set(temp)
-
-    def setFlags(self):
-        """
-        重置买卖标志
-        """
-        global is_start, is_ordered
-        if is_start is False:
-            is_ordered = [1] * NUM_OF_STOCKS
-
-    def updateControls(self):
-        """
-        实时股票名称、价格、状态信息
-        """
-        global actual_stocks_info, is_start
-        if is_start:
-            for row, (actual_code, actual_name, actual_price) in enumerate(actual_stocks_info):
-                if actual_code:
-                    self.variable[row][1].set(actual_name)
-                    self.variable[row][2].set(str(actual_price))
-                    if is_ordered[row] == 1:
-                        self.variable[row][8].set('监控中')
-                    elif is_ordered[row] == 0:
-                        self.variable[row][8].set('已委托')
-                    self.variable[row][9].set(str(is_dealt[row]))
-                else:
-                    self.variable[row][1].set('')
-                    self.variable[row][2].set('')
-                    self.variable[row][8].set('')
-                    self.variable[row][9].set('')
-
-        self.window.after(3000, self.updateControls)
-
-    @staticmethod
-    def __pickCodeFromItems(items_info):
-        """
-        提取股票代码
-        :param items_info: UI下各项输入信息
-        :return:股票代码列表
-        """
-        stock_codes = []
-        for item in items_info:
-            stock_codes.append(item[0])
-        return stock_codes
-
-    def start(self):
-        """
-        启动停止
-        """
-        global is_start, stock_codes, set_stocks_info
-        if is_start is False:
-            is_start = True
-        else:
-            is_start = False
-
-        if is_start:
-            self.getItems()
-            stock_codes = self.__pickCodeFromItems(set_stocks_info)
-            self.start_bt['text'] = '停止'
-            self.set_bt['state'] = DISABLED
-            self.load_bt['state'] = DISABLED
-        else:
-            self.start_bt['text'] = '开始'
-            self.set_bt['state'] = NORMAL
-            self.load_bt['state'] = NORMAL
-
-    def close(self):
-        """
-        关闭程序时，停止monitor线程
-        """
-        global is_monitor
-        is_monitor = False
-        self.window.quit()
-
-    def getItems(self):
-        """
-        获取UI上用户输入的各项数据，
-        """
-        global set_stocks_info
-        set_stocks_info = []
-
-        # 获取买卖价格数量输入项等
-        for row in range(self.rows):
-            set_stocks_info.append([])
-            for col in range(self.cols):
-                temp = self.variable[row][col].get().strip()
-                if col == 0:
-                    if len(temp) == 6 and temp.isdigit():  # 判断股票代码是否为6位数
-                        set_stocks_info[row].append(temp)
-                    else:
-                        set_stocks_info[row].append('')
-                elif col == 3:
-                    if temp in ('>', '<'):
-                        set_stocks_info[row].append(temp)
-                    else:
-                        set_stocks_info[row].append('')
-                elif col == 4:
-                    try:
-                        price = float(temp)
-                        if price > 0:
-                            set_stocks_info[row].append(price)  # 把价格转为数字
-                        else:
-                            set_stocks_info[row].append(0)
-                    except ValueError:
-                        set_stocks_info[row].append(0)
-                elif col == 5:
-                    if temp in ('B', 'S'):
-                        set_stocks_info[row].append(temp)
-                    else:
-                        set_stocks_info[row].append('')
-                elif col == 6:
-                    if temp.isdigit() and int(temp) >= 0:
-                        set_stocks_info[row].append(str(int(temp) // 100 * 100))
-                    else:
-                        set_stocks_info[row].append('')
-                elif col == 7:
-                    try:
-                        set_stocks_info[row].append(datetime.datetime.strptime(temp, '%H:%M:%S').time())
-                    except ValueError:
-                        set_stocks_info[row].append(datetime.datetime.strptime('1:00:00', '%H:%M:%S').time())
-
+    return df
 
 if __name__ == '__main__':
-    t1 = threading.Thread(target=StockGui)
-    t2 = threading.Thread(target=monitor)
-    t1.start()
-    t2.start()
+    t = threading.Thread(target=auto_trade)
+    t.start()

@@ -11,6 +11,8 @@ class snowball_monitor:
 
     proxy_tag = 0
 
+    adjustment_tag = 0
+
     pa_history = []
 
     basic_url = 'http://xueqiu.com/cubes/rebalancing/history.json'
@@ -140,7 +142,7 @@ class snowball_monitor:
 
     def load_proxies(self):
         if self.proxy_tag == len(self.Proxy_list):
-            proxy_tag = 0
+            self.proxy_tag = 0
             return None
         self.proxy_tag += 1
         return {'http': self.Proxy_list[self.proxy_tag-1]}
@@ -150,9 +152,11 @@ class snowball_monitor:
         self.s.post('http://xueqiu.com/user/login', data = self.p, headers = self.headers2)
 
     def get_new_adjustment(self):
-        for group in self.group_list:
-            group_history = self.get_group_adjustment_history(group, True)
-            return group_history
+        self.adjustment_tag += 1
+        if self.adjustment_tag == len(self.group_list):
+            self.adjustment_tag = 0
+        group_history = self.get_group_adjustment_history(self.group_list[self.adjustment_tag], True)
+        return group_history
 
 if __name__ == '__main__':
     print('Snowball monitor successfully loaded.')
