@@ -97,8 +97,6 @@ class snowball_monitor:
                 print('sb')
             else:
                 success = True
-        self.request_tag += 1
-        print(self.request_tag)
         content = r.json()
         group_history = self.mine_group_history(group['id'], content, need_check = need_check)
         return group_history

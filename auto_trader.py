@@ -271,32 +271,50 @@ class OperationThs:
 
 def auto_trade():
     count = 0
+    money = 0
     try:
         operation = OperationThs()
         operation.maxWindow()
-        pre_position = operation.getPosition()
-        position = format_position(pre_position)
+        raw_position = operation.getPosition()
+        position = format_position(raw_position)
         money = operation.getMoney()
     except:
         tkinter.messagebox.showerror('错误', '无法获得交易软件句柄')
     monitor = snowball_monitor()
     while 1:
-        na = monitor.get_new_adjustment()
+        cur_time = datetime.datetime.now()
+        t_s = int(cur_time.strftime('%H')) * 60 + int(cur_time.strftime('%M'))
+        if (t_s >= 568 and t_s <= 692) or (t_s >= 778 and t_s <= 902):
+            na = monitor.get_new_adjustment()
+        else:
+            na = None
         if na is not None:
             # sell
-            for stock_symbol in na['group_history']:
-                single_adjustment = na['group_history'][stock_symbol]
+            for stock_symbol in na['history']:
+                single_adjustment = na['history'][stock_symbol]
                 if single_adjustment['prev_weight'] > single_adjustment['target_weight'] and \
                     stock_symbol in position and position[stock_symbol] > 0:
                     quantity = calculate_sell_quantity(stock_symbol, single_adjustment, position[stock_symbol])
                     order([stock_symbol, 'S', quantity], operation)
+                    print([stock_symbol, 'S', quantity])
+                    time.sleep(0.1)
+                    raw_position = operation.getPosition()
+                    position = format_position(raw_position)
+                    money = operation.getMoney()
+                    print(money)
                     winsound.Beep(800, 800)
             # buy
-            for stock_symbol in na['group_history']:
-                single_adjustment = na['group_history'][stock_symbol]
+            for stock_symbol in na['history']:
+                single_adjustment = na['history'][stock_symbol]
                 if single_adjustment['prev_weight'] < single_adjustment['target_weight']:
                     quantity = calculate_buy_quantity(stock_symbol, single_adjustment, money)
                     order([stock_symbol, 'B', quantity], operation)
+                    print([stock_symbol, 'B', quantity])
+                    time.sleep(0.1)
+                    raw_position = operation.getPosition()
+                    position = format_position(raw_position)
+                    money = operation.getMoney()
+                    print(money)
                     winsound.Beep(800, 800)
         time.sleep(1.5)
         count += 1
@@ -329,7 +347,7 @@ def calculate_buy_quantity(stock_symbol, single_adjustment, money):
             break
     if p_w / t_w <= 0.3:
         return 0
-    elif p_w / t_w >= 0.8:
+    elif p_w / t_w >= 0.9:
         return math.floor(money/price/100)*100
     else:
         return (p_w/t_w*money/price)//100*100
