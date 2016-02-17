@@ -290,12 +290,12 @@ def auto_trade():
             na = None
         if na is not None:
             # sell
-            if single_adjustment['prev_weight'] is None:
-                single_adjustment['prev_weight']  = 0
-            if single_adjustment['target_weight'] is None:
-                single_adjustment['target_weight']  = 0
             for stock_symbol in na['history']:
                 single_adjustment = na['history'][stock_symbol]
+                if single_adjustment['prev_weight'] is None:
+                    single_adjustment['prev_weight'] = 0
+                if single_adjustment['target_weight'] is None:
+                    single_adjustment['target_weight'] = 0
                 if single_adjustment['prev_weight'] > single_adjustment['target_weight'] and \
                     stock_symbol in position and position[stock_symbol] > 0:
                     quantity = calculate_sell_quantity(stock_symbol, single_adjustment, position[stock_symbol])
@@ -309,11 +309,11 @@ def auto_trade():
                     winsound.Beep(800, 800)
             # buy
             for stock_symbol in na['history']:
-                if single_adjustment['prev_weight'] is None:
-                    single_adjustment['prev_weight']  = 0
-                if single_adjustment['target_weight'] is None:
-                    single_adjustment['target_weight']  = 0
                 single_adjustment = na['history'][stock_symbol]
+                if single_adjustment['prev_weight'] is None:
+                    single_adjustment['prev_weight'] = 0
+                if single_adjustment['target_weight'] is None:
+                    single_adjustment['target_weight'] = 0
                 if single_adjustment['prev_weight'] < single_adjustment['target_weight']:
                     quantity = calculate_buy_quantity(stock_symbol, single_adjustment, money)
                     order([stock_symbol, 'B', quantity], operation)
@@ -340,7 +340,7 @@ def format_position(position):
 def order(new_adjustment, operation):
     try:
         operation.maxWindow()
-        operation.order(new_adjustment)
+        operation.order(new_adjustment[0],new_adjustment[1],new_adjustment[2])
         operation.refresh()
     except:
         return False
